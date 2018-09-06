@@ -1,0 +1,610 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 key pair for SSH access to the EC2 instance.
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    ConstraintDescription: portiz_key-pair.pem
+  InstType:
+    Description: Instance Type for EC2 instances
+    Type: String
+    Default: t2.micro
+  CidrBlock:
+    Description: IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.0.0.0/16
+  PubSubnet1CIDR:
+    Description: IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.0.1.0/24
+  PubSubnet2CIDR:
+    Description: >-
+      IP range (CIDR notation) for the public subnet in the second Availability Zone
+    Type: String
+    Default: 10.0.2.0/24
+  PrivSubnetCIDR:
+    Description: IP range (CIDR notation) for the private subnet in the  Availability Zone
+    Type: String
+    Default: 10.0.3.0/24
+Resources:
+  portizVPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock:
+        Ref: CidrBlock
+      #EnableDnsHostnames: true
+      #EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: portiz_VPC
+      - Key: created_by
+        Value: Paola Ortiz
+      - Key: creation_date
+        Value: 09/2018
+      - Key: project_name
+        Value: Paola Ortiz
+      - Key: stop
+        Value: stop
+  portizPubSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: us-east-1a
+      CidrBlock:
+        Ref: PubSubnet1CIDR
+      Tags:
+      - Key: Name
+        Value: portiz_pubsubnet1
+      - Key: created_by
+        Value: Paola Ortiz
+      - Key: creation_date
+        Value: 09/2018
+      - Key: project_name
+        Value: Paola Ortiz
+      - Key: stop
+        Value: stop
+      VpcId:
+        Ref: portizVPC
+  portizPubSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: us-east-1b
+      CidrBlock:
+        Ref: PubSubnet2CIDR
+      Tags:
+      - Key: Name
+        Value: portiz_pubsubnet2
+      - Key: created_by
+        Value: Paola Ortiz
+      - Key: creation_date
+        Value: 09/2018
+      - Key: project_name
+        Value: Paola Ortiz
+      - Key: stop
+        Value: stop
+      VpcId:
+        Ref: portizVPC
+  portizPrivSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: us-east-1a
+      CidrBlock:
+        Ref: PrivSubnetCIDR
+      Tags:
+      - Key: Name
+        Value: portiz_privsubnet
+      - Key: created_by
+        Value: Paola Ortiz
+      - Key: creation_date
+        Value: 09/2018
+      - Key: project_name
+        Value: Paola Ortiz
+      - Key: stop
+        Value: stop
+      VpcId:
+        Ref: portizVPC
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: d2a65bfa-e904-4abb-a0ba-9e7590127a06
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+      - Key: Name
+        Value: portiz_IntGate
+      - Key: created_by
+        Value: Paola Ortiz
+      - Key: creation_date
+        Value: 09/2018
+      - Key: project_name
+        Value: Paola Ortiz
+      - Key: stop
+        Value: stop
+  InternetGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref portizVPC
+  portizPubRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref portizVPC
+      Tags:
+      - Key: Name
+        Value: portiz_PubRT
+  portizPubRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref portizPubRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  portizPubSubnet1RTAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref portizPubRouteTable
+      SubnetId: !Ref portizPubSubnet1
+  portizNatGateway:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      AllocationId: eipalloc-0676971052dd32238
+      SubnetId: !Ref portizPubSubnet2
+      Tags:
+      - Key: Name
+        Value: portiz_NatGateway
+  portizPrivRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref portizVPC
+      Tags:
+      - Key: Name
+        Value: portiz_PrivRT
+  portizPrivRoute:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref portizPrivRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref portizNatGateway
+  portizPrivSubnetRTAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref portizPrivRouteTable
+      SubnetId: !Ref portizPrivSubnet
+  portizPubSubnet2RTAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref portizPubRouteTable
+      SubnetId: !Ref portizPubSubnet2
+  portizSGLoadBalancer:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: portiz_loadbalancer_sg
+      GroupDescription: Security group for ApplicationLoadBalancer
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 81
+        ToPort: 81
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: -1
+        CidrIp: 0.0.0.0/0
+      VpcId:
+        Ref: portizVPC
+      Tags:
+      - Key: Name
+        Value: portiz_SGLoadBalancer
+  portizSGJenkins:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: portiz_Jenkins_sg
+      GroupDescription: Security group for Jenkins Instance
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 8080
+        ToPort: 8080
+        SourceSecurityGroupId: !Ref portizSGLoadBalancer
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: -1
+        CidrIp: 0.0.0.0/0
+      VpcId:
+        Ref: portizVPC
+      Tags:
+      - Key: Name
+        Value: portiz_SGJenkins
+  portizSGFront:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: portiz_Front_sg
+      GroupDescription: Security group for Front Instance
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 3030
+        ToPort: 3030
+        SourceSecurityGroupId: !Ref portizSGLoadBalancer
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        SourceSecurityGroupId: !Ref portizSGJenkins
+      SecurityGroupEgress:
+      - IpProtocol: -1
+        CidrIp: 0.0.0.0/0
+      VpcId: !Ref portizVPC
+      Tags:
+      - Key: Name
+        Value: portiz_SGFront
+  portizSGBack:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: portiz_Back_sg
+      GroupDescription: Security group for Back Instance
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 3000
+        ToPort: 3000
+        SourceSecurityGroupId: !Ref portizSGFront
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        SourceSecurityGroupId: !Ref portizSGJenkins
+      SecurityGroupEgress:
+      - IpProtocol: -1
+        CidrIp: 0.0.0.0/0
+      VpcId: !Ref portizVPC
+      Tags:
+      - Key: Name
+        Value: portiz_SGBack
+
+  portizInstFront1:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Delete
+    Properties:
+      AvailabilityZone: us-east-1a
+      ImageId: ami-b70554c8
+      InstanceType: !Ref InstType
+      KeyName: !Ref KeyName
+      NetworkInterfaces:
+      - AssociatePublicIpAddress: 'true'
+        DeviceIndex: '0'
+        GroupSet:
+        - Ref: portizSGFront
+        SubnetId:
+          Ref: portizPubSubnet1
+        PrivateIpAddress: 10.0.1.254
+      Tags:
+      - Key: Name
+        Value: portiz_Front1
+      - Key: created_by
+        Value: Paola Ortiz
+      - Key: creation_date
+        Value: 09/2018
+      - Key: project_name
+        Value: Paola Ortiz
+      - Key: stop
+        Value: stop
+      UserData:
+        Fn::Base64:
+          Fn::Join:
+            - ""
+            -
+              - "#!/bin/bash -ex"
+              - "\n"
+              - "yum update -y"
+              - "\n"
+              - "curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.32.0/install.sh | bash"
+              - "\n"
+              - ". ~/.nvm/nvm.sh"
+              - "\n"
+              - "nvm install node"
+              - "\n"
+              - "npm install pm2 -g"
+              - "\n"
+              - "yum install git -y"
+              - "\n"
+              - "git clone https://github.com/LeslyPaola/portiz_rampup_front.git"
+              - "\n"
+              - "cd portiz_rampup_front/"
+              - "\n"
+              - "cd movie-analyst-ui/"
+              - "\n"
+              - "pm2 start server.js"
+              - "\n"
+
+  portizInstFront2:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Delete
+    Properties:
+      AvailabilityZone: us-east-1b
+      ImageId: ami-b70554c8
+      InstanceType: !Ref InstType
+      KeyName: !Ref KeyName
+      NetworkInterfaces:
+      - AssociatePublicIpAddress: 'true'
+        DeviceIndex: '0'
+        GroupSet:
+        - Ref: portizSGFront
+        SubnetId:
+          Ref: portizPubSubnet2
+        PrivateIpAddress: 10.0.2.159
+      Tags:
+      - Key: Name
+        Value: portiz_Front2
+      - Key: created_by
+        Value: Paola Ortiz
+      - Key: creation_date
+        Value: 09/2018
+      - Key: project_name
+        Value: Paola Ortiz
+      - Key: stop
+        Value: stop
+      UserData:
+        Fn::Base64:
+          Fn::Join:
+            - ""
+            -
+              - "#!/bin/bash -ex"
+              - "\n"
+              - "yum update -y"
+              - "\n"
+              - "curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.32.0/install.sh | bash"
+              - "\n"
+              - ". ~/.nvm/nvm.sh"
+              - "\n"
+              - "nvm install node"
+              - "\n"
+              - "npm install pm2 -g"
+              - "\n"
+              - "yum install git -y"
+              - "\n"
+              - "git clone https://github.com/LeslyPaola/portiz_rampup_front.git"
+              - "\n"
+              - "cd portiz_rampup_front/"
+              - "\n"
+              - "cd movie-analyst-ui/"
+              - "\n"
+              - "pm2 start server.js"
+              - "\n"
+
+  portizInstJenkins:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Delete
+    Properties:
+      AvailabilityZone: us-east-1a
+      ImageId: ami-b70554c8
+      InstanceType: !Ref InstType
+      KeyName: !Ref KeyName
+      NetworkInterfaces:
+      - AssociatePublicIpAddress: 'true'
+        DeviceIndex: '0'
+        GroupSet:
+        - Ref: portizSGJenkins
+        SubnetId:
+          Ref: portizPubSubnet1
+        PrivateIpAddress: 10.0.1.194
+      Tags:
+      - Key: Name
+        Value: portiz_Jenkins
+      - Key: created_by
+        Value: Paola Ortiz
+      - Key: creation_date
+        Value: 09/2018
+      - Key: project_name
+        Value: Paola Ortiz
+      - Key: stop
+        Value: stop
+      UserData:
+        Fn::Base64:
+          Fn::Join:
+            - ""
+            -
+              - "#!/bin/bash -ex"
+              - "\n"
+              - "yum update -y"
+              - "\n"
+              - "yum install -y java-1.8.0-openjdk-devel"
+              - "\n"
+              - "wget -O /etc/yum.repos.d/jenkins.repo http://pkg.jenkins-ci.org/redhat-stable/jenkins.repo"
+              - "\n"
+              - "rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key"
+              - "\n"
+              - "yum install jenkins -y"
+              - "\n"
+              - "service jenkins start"
+              - "\n"
+
+  portizInstBack:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Delete
+    Properties:
+      AvailabilityZone: us-east-1a
+      ImageId: ami-b70554c8
+      InstanceType: !Ref InstType
+      KeyName: !Ref KeyName
+      NetworkInterfaces:
+      - AssociatePublicIpAddress: 'false'
+        DeviceIndex: '0'
+        GroupSet:
+        - Ref: portizSGBack
+        SubnetId:
+          Ref: portizPrivSubnet
+        PrivateIpAddress: 10.0.3.154
+      Tags:
+      - Key: Name
+        Value: portiz_Back
+      - Key: created_by
+        Value: Paola Ortiz
+      - Key: creation_date
+        Value: 09/2018
+      - Key: project_name
+        Value: Paola Ortiz
+      - Key: stop
+        Value: stop
+      UserData:
+        Fn::Base64:
+          Fn::Join:
+            - ""
+            -
+              - "#!/bin/bash -ex"
+              - "\n"
+              - "yum update -y"
+              - "\n"
+              - "curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.32.0/install.sh | bash"
+              - "\n"
+              - ". ~/.nvm/nvm.sh"
+              - "\n"
+              - "nvm install node"
+              - "\n"
+              - "npm install pm2 -g"
+              - "\n"
+              - "yum install git -y"
+              - "\n"
+              - "yum install mysql -y"
+              - "\n"
+              - "git clone https://github.com/LeslyPaola/portiz_rampup_back.git"
+              - "\n"
+
+  portizTGFront:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      Matcher:
+        HttpCode: '200'
+      Name: portizTGFront
+      Port: 80
+      Protocol: HTTP
+      Targets:
+      - Id:
+          Ref: portizInstFront1
+        Port: 3030
+      - Id:
+          Ref: portizInstFront2
+        Port: 3030
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref portizVPC
+
+  portizTGJenkins:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      Matcher:
+        HttpCode: '200'
+      Name: portizTGJenkins
+      Port: 81
+      Protocol: HTTP
+      Targets:
+      - Id:
+          Ref: portizInstJenkins
+        Port: 8080
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref portizVPC
+  portizFrontListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: portizTGFront
+      LoadBalancerArn:
+        Ref: portizLoadBalancer
+      Port: 80
+      Protocol: HTTP
+  portizJenkinsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: portizTGJenkins
+      LoadBalancerArn:
+        Ref: portizLoadBalancer
+      Port: 81
+      Protocol: HTTP
+  portizLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: portizLoadBlancer
+      Subnets:
+      - Ref: portizPubSubnet1
+      - Ref: portizPubSubnet2
+      SecurityGroups:
+      - Ref: portizSGLoadBalancer
+      Type: application
+      Tags:
+      - Key: Name
+        Value: portiz_LoadBalancer
+      - Key: created_by
+        Value: Paola Ortiz
+      - Key: creation_date
+        Value: 09/2018
+      - Key: project_name
+        Value: Paola Ortiz
+      - Key: stop
+        Value: stop
+  portizDBSG:
+    Type: AWS::RDS::DBSecurityGroup
+    Properties:
+      EC2VpcId: !Ref portizVPC
+      DBSecurityGroupIngress:
+      - EC2SecurityGroupId:
+          Ref: portizSGBack
+      GroupDescription: "Backend Access"
+      Tags:
+      - Key: Name
+        Value: portiz_RDS_SG
+  portizDBSubnet:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: "Data base Subnet group"
+      SubnetIds:
+      - Ref: portizPrivSubnet
+      - Ref: portizPubSubnet2
+      Tags:
+      - Key: "Name"
+        Value: "portizDBSubnet"
+  portizDataBase:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBName: movie_db
+      DBInstanceIdentifier: portizDBInstance
+      AvailabilityZone: us-east-1a
+      AllocatedStorage: '100'
+      DBInstanceClass: "db.t2.micro"
+      Engine: "MySQL"
+      EngineVersion: "5.7.22"
+      Iops: "1000"
+      DBSubnetGroupName: !Ref portizDBSubnet
+      DBSecurityGroups:
+      - Ref: portizDBSG
+      MasterUsername: portiz
+      MasterUserPassword: 12345678
+      Port: 3306
+      Tags:
+      - Key: Name
+        Value: portiz_DB
+      - Key: created_by
+        Value: Paola Ortiz
+      - Key: creation_date
+        Value: 09/2018
+      - Key: project_name
+        Value: Paola Ortiz
+      - Key: stop
+        Value: stop
+    DeletionPolicy: Snapshot
+
+
+Outputs:
+  VPC:
+    Description: Referenced to the created VPC
+    Value: !Ref portizVPC
